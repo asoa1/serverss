@@ -234,6 +234,28 @@ app.get('/api/stats', (req, res) => {
     session => Date.now() - session.createdAt < PENDING_EXPIRY
   );
   
+app.get('/api/session-data/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const session = userSessions.get(sessionId);
+
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+
+  if (!session.sessionString) {
+    return res.status(400).json({ error: 'Session not connected yet' });
+  }
+
+  res.json({
+    sessionId: session.sessionId,
+    sessionName: session.sessionName,
+    number: session.number,
+    sessionString: session.sessionString,
+    createdAt: session.createdAt,
+    exportedAt: new Date().toISOString()
+  });
+});
+
   const waitingCount = activeSessions.filter(s => s.status === 'waiting').length;
   const processingCount = activeSessions.filter(s => s.status === 'processing').length;
   const connectedCount = activeSessions.filter(s => s.isConnected).length;
