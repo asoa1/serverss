@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Icey_MD - Multi-User WhatsApp Bot</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .logo {
+            font-size: 3rem;
+            color: #25D366;
+            margin-bottom: 10px;
+        }
+
+        .title {
+            font-size: 2.5rem;
+            background: linear-gradient(45deg, #25D366, #128C7E);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #25D366;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .form-section, .results-section {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .typing-container {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .typing-text {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #25D366;
+            border-right: 3px solid #25D366;
+            white-space: nowrap;
+            overflow: hidden;
+            animation: typing 3s steps(30, end), blink-caret 0.75s step-end infinite;
+        }
+
+        @keyframes typing {
+            from { width: 0 }
+            to { width: 100% }
+        }
+
+        @keyframes blink-caret {
+            from, to { border-color: transparent }
+            50% { border-color: #25D366 }
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #25D366;
+            box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.1);
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(45deg, #25D366, #128C7E);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(37, 211, 102, 0.3);
+        }
+
+        button:disabled {
+            background: #ccc;
+            transform: none;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .status-container {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .status.waiting {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .pairing-code {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #25D366;
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 2px dashed #25D366;
+            animation: pulse 2s infinite;
+            display: none;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .session-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #25D366;
+        }
+
+        .loader {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #25D366;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .floating-icons {
+            position: fixed;
+            font-size: 2rem;
+            opacity: 0.1;
+            color: #25D366;
+            animation: float 6s ease-in-out infinite;
+            z-index: -1;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+        }
+
+        .queue-position {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            text-align: center;
+            display: none;
+        }
+
+        .session-string-container {
+            background: #e8f5e8;
+            border: 2px solid #25D366;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .session-string {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            word-break: break-all;
+            font-size: 0.9rem;
+            border: 1px solid #ddd;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        .copy-btn {
+            background: #25D366;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .copy-btn:hover {
+            background: #128C7E;
+        }
+        
+        .connection-status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            text-align: center;
+            font-weight: bold;
+            display: none;
+        }
+        
+        .status-connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-connecting {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    <!-- Floating background icons -->
+    <div class="floating-icons" style="top: 10%; left: 5%;">🤖</div>
+    <div class="floating-icons" style="top: 20%; right: 8%;">🔐</div>
+    <div class="floating-icons" style="bottom: 30%; left: 8%;">💻</div>
+    <div class="floating-icons" style="bottom: 20%; right: 5%;">⚡</div>
+    <div class="floating-icons" style="top: 50%; left: 10%;">👥</div>
+    <div class="floating-icons" style="top: 60%; right: 12%;">⏱️</div>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <i class="fas fa-robot"></i>
+            </div>
+            <h1 class="title">Icey_MD Multi-User</h1>
+            <p class="subtitle">Advanced WhatsApp Bot Authentication System</p>
+            
+            <div class="typing-container">
+                <div class="typing-text" id="typingText"></div>
+            </div>
+
+            <div class="stats-bar" id="statsBar">
+                <div class="stat-card">
+                    <div class="stat-number">0</div>
+                    <div class="stat-label">Active Sessions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">0</div>
+                    <div class="stat-label">Pending Requests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">0</div>
+                    <div class="stat-label">Codes Generated</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">120s</div>
+                    <div class="stat-label">Rate Limit</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="form-section">
+                <h2><i class="fas fa-key"></i> Request Pairing Code</h2>
+                <p>Enter your WhatsApp number to generate a pairing code:</p>
+                
+                <div class="form-group">
+                    <label for="number"><i class="fas fa-phone"></i> WhatsApp Number:</label>
+                    <input type="text" id="number" placeholder="Enter country code + number (e.g. 1234567890)" required>
+                </div>
+                
+                <button id="submitBtn">
+                    <i class="fas fa-paper-plane"></i> Generate Pairing Code
+                </button>
+
+                <div class="queue-position" id="queuePosition">
+                    <i class="fas fa-clock"></i> Position in queue: <span id="queuePos">1</span>
+                </div>
+                
+                <div id="status" class="status-container"></div>
+
+                <div class="session-info" id="sessionInfo" style="display: none;">
+                    <h4><i class="fas fa-id-card"></i> Session Info</h4>
+                    <p>Session ID: <code id="sessionIdDisplay"></code></p>
+                    <p>Number: <span id="sessionNumber"></span></p>
+                    <p>Status: <span id="sessionStatus">Pending</span></p>
+                </div>
+            </div>
+
+            <div class="results-section">
+                <h2><i class="fas fa-qrcode"></i> Your Pairing Code</h2>
+                
+                <div class="connection-status" id="connectionStatus"></div>
+                
+                <div class="pairing-code" id="pairingCode"></div>
+                
+                <div class="session-string-container" id="sessionStringContainer">
+                    <h3><i class="fas fa-key"></i> Your Session String</h3>
+                    <p>Your session has been successfully connected! Here's your session string:</p>
+                    <div class="session-string" id="sessionString"></div>
+                    <button class="copy-btn" onclick="copySessionString()">
+                        <i class="fas fa-copy"></i> Copy Session String
+                    </button>
+                    <p><small>Save this session string to reconnect later without needing a new pairing code.</small></p>
+                </div>
+                
+                <div class="instructions">
+                    <h3><i class="fas fa-info-circle"></i> How to use:</h3>
+                    <ol>
+                        <li>Open WhatsApp on your phone</li>
+                        <li>Go to Settings → Linked Devices → Link a Device</li>
+                        <li>Enter the 6-digit code shown above</li>
+                        <li>Wait for the connection to complete</li>
+                        <li>Your session string will be generated automatically</li>
+                    </ol>
+                </div>
+
+                <div class="rate-limit-info">
+                    <h3><i class="fas fa-clock"></i> Rate Limit Info</h3>
+                    <p>You can request a new code for the same number every 2 minutes.</p>
+                    <p>Each session expires after 5 minutes of inactivity.</p>
+                    <p>Your session string allows you to reconnect without a new code.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const typingText = document.getElementById('typingText');
+        const submitBtn = document.getElementById('submitBtn');
+        const numberInput = document.getElementById('number');
+        const statusDiv = document.getElementById('status');
+        const pairingCodeElement = document.getElementById('pairingCode');
+        const statsBar = document.getElementById('statsBar');
+        const sessionInfo = document.getElementById('sessionInfo');
+        const sessionIdDisplay = document.getElementById('sessionIdDisplay');
+        const sessionNumber = document.getElementById('sessionNumber');
+        const sessionStatus = document.getElementById('sessionStatus');
+        const queuePosition = document.getElementById('queuePosition');
+        const queuePosSpan = document.getElementById('queuePos');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const sessionStringContainer = document.getElementById('sessionStringContainer');
+        const sessionStringElement = document.getElementById('sessionString');
+
+        let currentSessionId = null;
+        let queueCheckInterval = null;
+
+        // Icey_MD typing animations
+        const messages = [
+            "Multi-User WhatsApp Bot...",
+            "Secure Authentication...",
+            "Rate Limited System...",
+            "Queue Management...",
+            "Powered by Icey_MD..."
+        ];
+
+        let messageIndex = 0;
+        let charIndex = 0;
+        let isDeleting = false;
+
+        function typeWriter() {
+            const currentMessage = messages[messageIndex];
+            
+            if (isDeleting) {
+                typingText.textContent = currentMessage.substring(0, charIndex - 1);
+                charIndex--;
+            } else {
+                typingText.textContent = currentMessage.substring(0, charIndex + 1);
+                charIndex++;
+            }
+
+            if (!isDeleting && charIndex === currentMessage.length) {
+                setTimeout(() => isDeleting = true, 2000);
+            } else if (isDeleting && charIndex === 0) {
+                isDeleting = false;
+                messageIndex = (messageIndex + 1) % messages.length;
+            }
+
+            setTimeout(typeWriter, isDeleting ? 50 : 100);
+        }
+
+        // Start typing animation
+        typeWriter();
+
+        // Load stats
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                statsBar.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-number">${data.totalActiveSessions}</div>
+                        <div class="stat-label">Active Sessions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${data.pendingRequests}</div>
+                        <div class="stat-label">Pending Requests</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${data.codesGenerated}</div>
+                        <div class="stat-label">Codes Generated</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${data.rateLimitTimeout}</div>
+                        <div class="stat-label">Rate Limit</div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        submitBtn.addEventListener('click', async () => {
+            const number = numberInput.value.trim();
+            
+            if (!number) {
+                showStatus('Please enter a valid phone number', 'error');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<div class="loader"></div> Creating Session...';
+            showStatus('🔐 Creating new session...', 'waiting');
+
+            try {
+                const response = await fetch('/api/number', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        number,
+                        sessionId: currentSessionId 
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.status === 429) {
+                    showStatus('⏳ ' + data.error, 'error');
+                    resetButton();
+                    return;
+                }
+
+                if (data.success) {
+                    currentSessionId = data.sessionId;
+                    showStatus('✅ Session created! Generating pairing code...', 'success');
+                    
+                    // Show session info
+                    sessionInfo.style.display = 'block';
+                    sessionIdDisplay.textContent = currentSessionId.substring(0, 8) + '...';
+                    sessionNumber.textContent = number;
+                    
+                    await waitForPairingCode();
+                } else {
+                    showStatus('❌ Error: ' + (data.error || 'Failed to create session'), 'error');
+                    resetButton();
+                }
+            } catch (error) {
+                showStatus('❌ Network error: Could not connect to server', 'error');
+                resetButton();
+            }
+        });
+
+        async function waitForPairingCode() {
+            submitBtn.innerHTML = '<div class="loader"></div> Generating pairing code...';
+            sessionStatus.textContent = 'Generating code...';
+            
+            try {
+                const response = await fetch('/api/pairing-code/' + currentSessionId);
+                const data = await response.json();
+
+                if (data.available && data.code) {
+                    showPairingCode(data.code, data.isConnected, data.sessionString);
+                    if (data.isConnected && data.sessionString) {
+                        showSessionString(data.sessionString);
+                    } else {
+                        checkConnectionStatus();
+                    }
+                } else {
+                    showStatus('⏳ Waiting for pairing code generation...', 'waiting');
+                    sessionStatus.textContent = 'In queue...';
+                    setTimeout(waitForPairingCode, 2000);
+                }
+            } catch (error) {
+                showStatus('❌ Error fetching pairing code', 'error');
+                sessionStatus.textContent = 'Error';
+                resetButton();
+            }
+        }
+
+        function showPairingCode(code, isConnected, sessionString) {
+            pairingCodeElement.textContent = code;
+            pairingCodeElement.style.display = 'block';
+            statusDiv.style.display = 'none';
+            submitBtn.style.display = 'none';
+            queuePosition.style.display = 'none';
+            
+            if (isConnected) {
+                showConnectionStatus('connected');
+                if (sessionString) {
+                    showSessionString(sessionString);
+                }
+            } else {
+                showConnectionStatus('connecting');
+            }
+        }
+
+        function showSessionString(sessionString) {
+            sessionStringElement.textContent = sessionString;
+            sessionStringContainer.style.display = 'block';
+            showConnectionStatus('connected');
+        }
+
+        function showConnectionStatus(status) {
+            connectionStatus.style.display = 'block';
+            
+            if (status === 'connected') {
+                connectionStatus.className = 'connection-status status-connected';
+                connectionStatus.innerHTML = '<i class="fas fa-check-circle"></i> Successfully Connected!';
+            } else {
+                connectionStatus.className = 'connection-status status-connecting';
+                connectionStatus.innerHTML = '<i class="fas fa-sync-alt"></i> Waiting for connection...';
+            }
+        }
+
+        async function checkConnectionStatus() {
+            if (!currentSessionId) return;
+            
+            try {
+                const response = await fetch('/api/session/' + currentSessionId);
+                const session = await response.json();
+                
+                if (session.isConnected) {
+                    const sessionResponse = await fetch('/api/session-string/' + currentSessionId);
+                    const sessionData = await sessionResponse.json();
+                    
+                    if (sessionData.sessionString) {
+                        showSessionString(sessionData.sessionString);
+                    }
+                } else {
+                    setTimeout(checkConnectionStatus, 2000);
+                }
+            } catch (error) {
+                setTimeout(checkConnectionStatus, 2000);
+            }
+        }
+
+        function copySessionString() {
+            const textArea = document.createElement('textarea');
+            textArea.value = sessionStringElement.textContent;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+            }, 2000);
+        }
+
+        function showStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status-container status ${type}`;
+            statusDiv.style.display = 'block';
+        }
+
+        function resetButton() {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Generate Pairing Code';
+            submitBtn.style.display = 'block';
+        }
+
+        // Check server status on page load and load stats
+        loadStats();
+        setInterval(loadStats, 5000);
+
+        // Add input validation
+        numberInput.addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/[^\d+]/g, '');
+        });
+
+        // Check if there's a existing session in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const existingSession = urlParams.get('session');
+        if (existingSession) {
+            currentSessionId = existingSession;
+            fetch('/api/session/' + existingSession)
+                .then(response => response.json())
+                .then(session => {
+                    if (session.number) {
+                        numberInput.value = session.number;
+                        sessionInfo.style.display = 'block';
+                        sessionIdDisplay.textContent = existingSession.substring(0, 8) + '...';
+                        sessionNumber.textContent = session.number;
+                        sessionStatus.textContent = session.hasPairingCode ? 'Code generated' : 'Pending';
+                        
+                        if (session.hasPairingCode) {
+                            fetch('/api/pairing-code/' + existingSession)
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.available) {
+                                        showPairingCode(data.code, data.isConnected, data.sessionString);
+                                        if (data.isConnected && data.sessionString) {
+                                            showSessionString(data.sessionString);
+                                        }
+                                    }
+                                });
+                        }
+                    }
+                })
+                .catch(console.error);
+        }
+    </script>
+</body>
+</html>
