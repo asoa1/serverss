@@ -20,6 +20,8 @@
   "dependencies": {
     "@hapi/boom": "^10.0.0",
     "@whiskeysockets/baileys": "^6.4.0",
+    "adm-zip": "^0.5.10",
+    "archiver": "^6.0.1",
     "chalk": "^4.1.2",
     "cors": "^2.8.5",
     "express": "^4.21.2"
