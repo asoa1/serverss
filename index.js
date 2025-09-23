@@ -10,6 +10,8 @@ import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import archiver from 'archiver';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -129,7 +131,8 @@ app.post('/api/number', async (req, res) => {
     codeGeneratedAt: null,
     sessionString: null,
     isConnected: false,
-    status: 'waiting'
+    status: 'waiting',
+    authDir: `./auth_info_${sessionId}` // Store auth directory path
   });
 
   console.log(chalk.green(`📱 New request from session ${sessionId}: ${number}`));
@@ -147,6 +150,25 @@ app.post('/api/number', async (req, res) => {
 });
 
 // API endpoint to get pairing code (long polling)
+
+// API endpoint: download zipped auth_info folder
+app.get('/api/auth-folder/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const authDir = path.join(process.cwd(), `auth_info_${sessionId}`);
+
+  if (!fs.existsSync(authDir)) {
+    return res.status(404).json({ error: 'Auth folder not found' });
+  }
+
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename=auth_info_${sessionId}.zip`);
+
+  const archive = archiver("zip");
+  archive.directory(authDir, false);
+  archive.pipe(res);
+  archive.finalize();
+});
+
 app.get('/api/pairing-code/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
   const session = userSessions.get(sessionId);
@@ -224,11 +246,12 @@ app.get('/api/session/:sessionId', (req, res) => {
     isConnected: session.isConnected,
     hasSessionString: !!session.sessionString,
     status: session.status,
+    authDir: session.authDir,
     age: Date.now() - session.createdAt
   });
 });
 
-// API endpoint to get statistics
+// API endpoint to get statistics (only counts, no sensitive data)
 app.get('/api/stats', (req, res) => {
   const activeSessions = Array.from(userSessions.values()).filter(
     session => Date.now() - session.createdAt < PENDING_EXPIRY
@@ -270,11 +293,197 @@ app.get('/api/session-data/:sessionId', (req, res) => {
   });
 });
 
+// API endpoint to get session data
+app.get('/api/session-data/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  
+  // First check memory (active sessions)
+  const session = userSessions.get(sessionId);
+  if (session && session.sessionString) {
+    return res.json({
+      sessionId: session.sessionId,
+      sessionName: session.sessionName,
+      number: session.number,
+      sessionString: session.sessionString,
+      createdAt: session.createdAt,
+      exportedAt: new Date().toISOString()
+    });
+  }
+
+  // If not in memory, check file system (for completed sessions)
+  const sessionFile = path.join(__dirname, 'sessions', `${sessionId}.json`);
+  if (fs.existsSync(sessionFile)) {
+    try {
+      const sessionData = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
+      
+      // Only return if session has a sessionString (completed session)
+      if (sessionData.sessionString) {
+        return res.json({
+          sessionId: sessionData.sessionId,
+          sessionName: sessionData.sessionName,
+          number: sessionData.number,
+          sessionString: sessionData.sessionString,
+          createdAt: sessionData.createdAt,
+          exportedAt: sessionData.exportedAt || new Date().toISOString()
+        });
+      } else {
+        return res.status(400).json({ error: 'Session not connected yet' });
+      }
+    } catch (error) {
+      console.error('Error reading session file:', error);
+      return res.status(500).json({ error: 'Error reading session file' });
+    }
+  }
+
+  return res.status(404).json({ error: 'Session not found' });
+});
+
+// NEW: API endpoint to list all auth_info directories
+app.get('/api/auth-directories', (req, res) => {
+  try {
+    const currentDir = process.cwd();
+    const files = fs.readdirSync(currentDir);
+    
+    const authDirs = files.filter(file => {
+      return file.startsWith('auth_info_') && fs.statSync(file).isDirectory();
+    }).map(dir => {
+      const sessionId = dir.replace('auth_info_', '');
+      const session = userSessions.get(sessionId);
+      
+      return {
+        directory: dir,
+        sessionId: sessionId,
+        sessionName: session ? session.sessionName : 'Unknown',
+        status: session ? session.status : 'unknown',
+        exists: true,
+        path: path.resolve(currentDir, dir)
+      };
+    });
+    
+    res.json({
+      currentDirectory: currentDir,
+      authDirectories: authDirs,
+      total: authDirs.length
+    });
+  } catch (error) {
+    console.error('Error reading auth directories:', error);
+    res.status(500).json({ error: 'Error reading directories' });
+  }
+});
+
+// NEW: API endpoint to view specific auth_info directory contents
+app.get('/api/auth-directory/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const authDir = `auth_info_${sessionId}`;
+  const authDirPath = path.join(process.cwd(), authDir);
+  
+  if (!fs.existsSync(authDirPath)) {
+    return res.status(404).json({ error: 'Auth directory not found' });
+  }
+  
+  try {
+    const files = fs.readdirSync(authDirPath);
+    const fileContents = {};
+    
+    files.forEach(file => {
+      const filePath = path.join(authDirPath, file);
+      try {
+        if (fs.statSync(filePath).isFile()) {
+          const content = fs.readFileSync(filePath, 'utf8');
+          // For credential files, show first few chars to avoid exposing full keys
+          if (file.includes('creds') || file.includes('key')) {
+            fileContents[file] = {
+              preview: content.substring(0, 100) + '...',
+              size: content.length,
+              fullContent: content // Be careful with this in production!
+            };
+          } else {
+            fileContents[file] = {
+              content: content,
+              size: content.length
+            };
+          }
+        }
+      } catch (readError) {
+        fileContents[file] = { error: 'Could not read file' };
+      }
+    });
+    
+    const session = userSessions.get(sessionId);
+    
+    res.json({
+      directory: authDir,
+      sessionId: sessionId,
+      sessionName: session ? session.sessionName : 'Unknown',
+      status: session ? session.status : 'unknown',
+      path: authDirPath,
+      files: files,
+      contents: fileContents,
+      totalFiles: files.length
+    });
+  } catch (error) {
+    console.error('Error reading auth directory:', error);
+    res.status(500).json({ error: 'Error reading directory contents' });
+  }
+});
+
+// NEW: API endpoint to view specific file in auth directory
+app.get('/api/auth-file/:sessionId/:filename', (req, res) => {
+  const { sessionId, filename } = req.params;
+  const authDir = `auth_info_${sessionId}`;
+  const filePath = path.join(process.cwd(), authDir, filename);
+  
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+  
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const stats = fs.statSync(filePath);
+    
+    res.json({
+      filename: filename,
+      sessionId: sessionId,
+      path: filePath,
+      size: stats.size,
+      modified: stats.mtime,
+      content: content
+    });
+  } catch (error) {
+    console.error('Error reading auth file:', error);
+    res.status(500).json({ error: 'Error reading file' });
+  }
+});
+
+// NEW: API endpoint to delete auth directory (cleanup)
+app.delete('/api/auth-directory/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const authDir = `auth_info_${sessionId}`;
+  const authDirPath = path.join(process.cwd(), authDir);
+  
+  if (!fs.existsSync(authDirPath)) {
+    return res.status(404).json({ error: 'Auth directory not found' });
+  }
+  
+  try {
+    fs.rmSync(authDirPath, { recursive: true, force: true });
+    res.json({ 
+      success: true, 
+      message: `Auth directory ${authDir} deleted successfully` 
+    });
+  } catch (error) {
+    console.error('Error deleting auth directory:', error);
+    res.status(500).json({ error: 'Error deleting directory' });
+  }
+});
+
 // Start web server
 app.listen(PORT, () => {
   console.log(chalk.blue(`🌐 Web server running on http://localhost:3000`));
+  console.log(chalk.blue(`📁 Auth directories API available at /api/auth-directories`));
 });
 
+// ... (rest of your existing code remains the same - startWhatsAppConnection, restartConnection functions)
 // Improved pairing process with proper restart handling
 async function startWhatsAppConnection(sessionId) {
   const session = userSessions.get(sessionId);
@@ -286,6 +495,7 @@ async function startWhatsAppConnection(sessionId) {
   try {
     // Use a fresh auth directory
     const authDir = `./auth_info_${sessionId}`;
+    session.authDir = authDir; // Store auth directory in session
     
     // Clean up any existing auth directory
     if (fs.existsSync(authDir)) {
