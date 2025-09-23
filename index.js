@@ -11,9 +11,31 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import archiver from 'archiver';
-
+import { spawn, execSync } from 'child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Function to check and install dependencies
+async function installDependencies() {
+  return new Promise((resolve, reject) => {
+    console.log(chalk.blue('📦 Checking dependencies...'));
+    
+    try {
+      // Check if node_modules exists
+      if (!fs.existsSync(path.join(__dirname, 'node_modules'))) {
+        console.log(chalk.yellow('🔧 node_modules not found. Running npm install...'));
+        execSync('npm install', { stdio: 'inherit', cwd: __dirname });
+        console.log(chalk.green('✅ Dependencies installed successfully!'));
+      } else {
+        console.log(chalk.green('✅ Dependencies already installed.'));
+      }
+      resolve();
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to install dependencies:'), error);
+      reject(error);
+    }
+  });
+}
 
 // Web server setup
 const app = express();
@@ -477,11 +499,26 @@ app.delete('/api/auth-directory/:sessionId', (req, res) => {
   }
 });
 
-// Start web server
-app.listen(PORT, () => {
-  console.log(chalk.blue(`🌐 Web server running on http://localhost:3000`));
-  console.log(chalk.blue(`📁 Auth directories API available at /api/auth-directories`));
-});
+// Start web server with dependency check
+async function startServer() {
+  try {
+    // Install dependencies first
+    await installDependencies();
+    
+    // Then start the server
+    app.listen(PORT, () => {
+      console.log(chalk.green(`✅ Dependencies checked and installed!`));
+      console.log(chalk.blue(`🌐 Web server running on http://localhost:${PORT}`));
+      console.log(chalk.blue(`📁 Auth directories API available at /api/auth-directories`));
+    });
+  } catch (error) {
+    console.error(chalk.red('❌ Failed to start server:'), error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer();
 
 // ... (rest of your existing code remains the same - startWhatsAppConnection, restartConnection functions)
 // Improved pairing process with proper restart handling
@@ -738,5 +775,5 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-console.log(chalk.blue('🌍 WhatsApp Pairing Service Started'));
+console.log(chalk.blue('🌍 WhatsApp Pairing Service Starting...'));
 console.log(chalk.blue('🔄 Auto-restart enabled for 515 errors'));
