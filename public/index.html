@@ -334,6 +334,74 @@
             color: #856404;
             border: 1px solid #ffeaa7;
         }
+
+        /* === DOWNLOAD SECTION CSS === */
+        .download-section {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            margin-top: 30px;
+        }
+
+        .setup-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #25D366;
+        }
+
+        .setup-info ol {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .setup-info li {
+            margin-bottom: 8px;
+        }
+
+        .code-preview {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .code-preview pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .download-button {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            margin-top: 20px;
+        }
+
+        .download-button:hover {
+            box-shadow: 0 10px 20px rgba(255, 107, 107, 0.3);
+        }
+
+        .file-info {
+            text-align: center;
+            margin-top: 10px;
+            color: #666;
+        }
+
+        .file-info code {
+            background: #f1f1f1;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #e74c3c;
+        }
     </style>
 </head>
 <body>
@@ -441,6 +509,139 @@
                 </div>
             </div>
         </div>
+
+        <!-- Download Section -->
+        <div class="download-section">
+            <div class="form-section">
+                <h2><i class="fas fa-download"></i> Setup File Download</h2>
+                <p>Download the setup file to run your WhatsApp bot locally:</p>
+                
+                <div class="setup-info">
+                    <h3><i class="fas fa-cogs"></i> Setup Instructions:</h3>
+                    <ol>
+                        <li>Download the setup file below</li>
+                        <li>Save it as <code>index.js</code> in your project folder</li>
+                        <li>Make sure you have Node.js installed</li>
+                        <li>Run <code>node index.js</code> in your terminal</li>
+                        <li>Follow the on-screen instructions</li>
+                    </ol>
+                </div>
+
+                <div class="file-preview">
+                    <h4><i class="fas fa-file-code"></i> File Preview:</h4>
+                    <div class="code-preview">
+                        <pre><code>cconst readline = require("readline");
+const { execSync } = require("child_process");
+const fs = require("fs");
+const https = require("https");
+const path = require("path");
+
+// === CONFIG ===
+const API_SERVER = "https://iceymd.onrender.com/api/auth-folder"; 
+const GITHUB_REPO = "https://github.com/asoa1/Icey-md-bot.git"; // replace
+const BOT_FOLDER = "icey-md-bot";
+
+// === readline ===
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+// === ensure adm-zip installed ===
+function ensureAdmZip() {
+  try {
+    require.resolve("adm-zip");
+  } catch (e) {
+    console.log("📦 Installing adm-zip...");
+    execSync("npm install adm-zip", { stdio: "inherit" });
+  }
+}
+ensureAdmZip();
+const AdmZip = require("adm-zip");
+
+// === download to buffer helper ===
+function downloadBuffer(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      if (res.statusCode !== 200) {
+        reject(new Error(`Failed to get '${url}' (${res.statusCode})`));
+        return;
+      }
+      const data = [];
+      res.on("data", (chunk) => data.push(chunk));
+      res.on("end", () => resolve(Buffer.concat(data)));
+    }).on("error", reject);
+  });
+}
+
+// === MAIN ===
+rl.question(
+  "❖ ICEY SETUP ❖\n╭────────────────╼\n╎ Enter Session Name : \n╰────────────────╼ ",
+  async (sessionName) => {
+    try {
+      console.log(`\n🔄 Setting up with session: ${sessionName}...\n`);
+
+      // Step 1: Pull session zip from API (as buffer)
+      const sessionUrl = `${API_SERVER}/${sessionName}`;
+      console.log("⬇️ Downloading auth_folder from API...");
+      const buffer = await downloadBuffer(sessionUrl);
+
+      // Step 2: Extract directly from buffer
+      console.log("📂 Extracting session...");
+      const zip = new AdmZip(buffer);
+
+      // Extract into temp folder
+      const sessionPath = path.join(__dirname, sessionName);
+      if (fs.existsSync(sessionPath)) {
+        fs.rmSync(sessionPath, { recursive: true, force: true });
+      }
+      zip.extractAllTo(sessionPath, true);
+
+      // Step 3: Clone repo if not exists
+      if (!fs.existsSync(BOT_FOLDER)) {
+        console.log("📥 Cloning repository...");
+        execSync(`git clone ${GITHUB_REPO} ${BOT_FOLDER}`, {
+          stdio: "inherit",
+        });
+      } else {
+        console.log("✅ Repo folder already exists, skipping clone.");
+      }
+
+      // Step 4: Install dependencies
+      console.log("📦 Installing dependencies...");
+      execSync(`cd ${BOT_FOLDER} && npm install`, { stdio: "inherit" });
+
+      // Step 5: Move session into bot folder
+      console.log("📂 Moving session into bot folder...");
+      const targetSessionPath = path.join(BOT_FOLDER, "session");
+      if (fs.existsSync(targetSessionPath)) {
+        fs.rmSync(targetSessionPath, { recursive: true, force: true });
+      }
+      fs.renameSync(sessionPath, targetSessionPath);
+
+      // Step 6: Start bot
+      console.log("🚀 Starting ICEY MD Bot...");
+      execSync(`cd ${BOT_FOLDER} && node index.js`, { stdio: "inherit" });
+    } catch (err) {
+      console.error("❌ Setup failed:", err.message);
+    } finally {
+      rl.close();
+    }
+  }
+);
+</code></pre>
+                    </div>
+                </div>
+
+                <button id="downloadBtn" class="download-button">
+                    <i class="fas fa-download"></i> Download Setup File (index.js)
+                </button>
+                
+                <p class="file-info">
+                    <small><i class="fas fa-info-circle"></i> File will be downloaded as <code>index.js</code></small>
+                </p>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -459,6 +660,7 @@
         const connectionStatus = document.getElementById('connectionStatus');
         const sessionStringContainer = document.getElementById('sessionStringContainer');
         const sessionStringElement = document.getElementById('sessionString');
+        const downloadBtn = document.getElementById('downloadBtn');
 
         let currentSessionId = null;
         let queueCheckInterval = null;
@@ -692,6 +894,135 @@
             submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Generate Pairing Code';
             submitBtn.style.display = 'block';
         }
+
+        // Download button functionality
+        const setupFileContent = `const readline = require("readline");
+const { execSync } = require("child_process");
+const fs = require("fs");
+const https = require("https");
+const path = require("path");
+
+// === CONFIG ===
+const API_SERVER = "https://iceymd.onrender.com/api/auth-folder"; 
+const GITHUB_REPO = "https://github.com/asoa1/Icey-md-bot.git";
+const BOT_FOLDER = "icey-md-bot";
+
+// === readline ===
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+// === ensure adm-zip installed ===
+function ensureAdmZip() {
+  try {
+    require.resolve("adm-zip");
+  } catch (e) {
+    console.log("📦 Installing adm-zip...");
+    execSync("npm install adm-zip", { stdio: "inherit" });
+  }
+}
+ensureAdmZip();
+const AdmZip = require("adm-zip");
+
+// === download to buffer helper ===
+function downloadBuffer(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      if (res.statusCode !== 200) {
+        reject(new Error(\`Failed to get '\${url}' (\${res.statusCode})\`));
+        return;
+      }
+      const data = [];
+      res.on("data", (chunk) => data.push(chunk));
+      res.on("end", () => resolve(Buffer.concat(data)));
+    }).on("error", reject);
+  });
+}
+
+// === MAIN ===
+rl.question(
+  "❖ ICEY SETUP ❖\\\\n╭────────────────╼\\\\n╎ Enter Session Name : \\\\n╰────────────────╼ ",
+  async (sessionName) => {
+    try {
+      console.log(\`\\\\n🔄 Setting up with session: \${sessionName}...\\\\n\`);
+
+      // Step 1: Pull session zip from API (as buffer)
+      const sessionUrl = \`\${API_SERVER}/\${sessionName}\`;
+      console.log("⬇️ Downloading auth_folder from API...");
+      const buffer = await downloadBuffer(sessionUrl);
+
+      // Step 2: Extract directly from buffer
+      console.log("📂 Extracting session...");
+      const zip = new AdmZip(buffer);
+
+      // Extract into temp folder
+      const sessionPath = path.join(__dirname, sessionName);
+      if (fs.existsSync(sessionPath)) {
+        fs.rmSync(sessionPath, { recursive: true, force: true });
+      }
+      zip.extractAllTo(sessionPath, true);
+
+      // Step 3: Clone repo if not exists
+      if (!fs.existsSync(BOT_FOLDER)) {
+        console.log("📥 Cloning repository...");
+        execSync(\`git clone \${GITHUB_REPO} \${BOT_FOLDER}\`, {
+          stdio: "inherit",
+        });
+      } else {
+        console.log("✅ Repo folder already exists, skipping clone.");
+      }
+
+      // Step 4: Install dependencies
+      console.log("📦 Installing dependencies...");
+      execSync(\`cd \${BOT_FOLDER} && npm install\`, { stdio: "inherit" });
+
+      // Step 5: Move session into bot folder
+      console.log("📂 Moving session into bot folder...");
+      const targetSessionPath = path.join(BOT_FOLDER, "session");
+      if (fs.existsSync(targetSessionPath)) {
+        fs.rmSync(targetSessionPath, { recursive: true, force: true });
+      }
+      fs.renameSync(sessionPath, targetSessionPath);
+
+      // Step 6: Start bot
+      console.log("🚀 Starting ICEY MD Bot...");
+      execSync(\`cd \${BOT_FOLDER} && node index.js\`, { stdio: "inherit" });
+    } catch (err) {
+      console.error("❌ Setup failed:", err.message);
+    } finally {
+      rl.close();
+    }
+  }
+);`;
+
+        downloadBtn.addEventListener('click', function() {
+            // Create a Blob with the file content
+            const blob = new Blob([setupFileContent], { type: 'application/javascript' });
+            
+            // Create a download link
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'index.js'; // This ensures it downloads as index.js
+            a.style.display = 'none';
+            
+            // Add to document, click, and remove
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            // Show download confirmation
+            const originalText = downloadBtn.innerHTML;
+            downloadBtn.innerHTML = '<i class="fas fa-check"></i> File Downloaded!';
+            downloadBtn.style.background = 'linear-gradient(45deg, #27ae60, #2ecc71)';
+            
+            setTimeout(() => {
+                downloadBtn.innerHTML = originalText;
+                downloadBtn.style.background = 'linear-gradient(45deg, #ff6b6b, #ee5a24)';
+            }, 2000);
+        });
 
         // Check server status on page load and load stats
         loadStats();
