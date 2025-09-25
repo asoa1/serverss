@@ -171,8 +171,6 @@ app.post('/api/number', async (req, res) => {
   });
 });
 
-// API endpoint to get pairing code (long polling)
-
 // API endpoint: download zipped auth_info folder
 app.get('/api/auth-folder/:sessionId', (req, res) => {
   const { sessionId } = req.params;
@@ -278,28 +276,6 @@ app.get('/api/stats', (req, res) => {
   const activeSessions = Array.from(userSessions.values()).filter(
     session => Date.now() - session.createdAt < PENDING_EXPIRY
   );
-  
-app.get('/api/session-data/:sessionId', (req, res) => {
-  const { sessionId } = req.params;
-  const session = userSessions.get(sessionId);
-
-  if (!session) {
-    return res.status(404).json({ error: 'Session not found' });
-  }
-
-  if (!session.sessionString) {
-    return res.status(400).json({ error: 'Session not connected yet' });
-  }
-
-  res.json({
-    sessionId: session.sessionId,
-    sessionName: session.sessionName,
-    number: session.number,
-    sessionString: session.sessionString,
-    createdAt: session.createdAt,
-    exportedAt: new Date().toISOString()
-  });
-});
 
   const waitingCount = activeSessions.filter(s => s.status === 'waiting').length;
   const processingCount = activeSessions.filter(s => s.status === 'processing').length;
@@ -311,7 +287,8 @@ app.get('/api/session-data/:sessionId', (req, res) => {
     waitingSessions: waitingCount,
     processingSessions: processingCount,
     connectedSessions: connectedCount,
-    errorSessions: errorCount
+    errorSessions: errorCount,
+    rateLimitTimeout: '120s'
   });
 });
 
@@ -520,8 +497,7 @@ async function startServer() {
 // Start the server
 startServer();
 
-// ... (rest of your existing code remains the same - startWhatsAppConnection, restartConnection functions)
-// Improved pairing process with proper restart handling
+// Fixed WhatsApp connection functions
 async function startWhatsAppConnection(sessionId) {
   const session = userSessions.get(sessionId);
   if (!session) return;
@@ -532,7 +508,7 @@ async function startWhatsAppConnection(sessionId) {
   try {
     // Use a fresh auth directory
     const authDir = `./auth_info_${sessionId}`;
-    session.authDir = authDir; // Store auth directory in session
+    session.authDir = authDir;
     
     // Clean up any existing auth directory
     if (fs.existsSync(authDir)) {
@@ -592,21 +568,30 @@ async function startWhatsAppConnection(sessionId) {
             console.log(chalk.green(`💫 Session string exported`));
           }
           
-          // Send session name
+          // Send session name with connection check
           try {
-            await sock.sendMessage(sock.user.id, {
-              text: `🏷️ *SESSION NAME: ${session.sessionName}*\n\n✅ Successfully connected!\n📱 Number: ${session.number}\n🔑 Session ID: ${sessionId}`
-            });
-            console.log(chalk.green('📤 Session name sent'));
+            // Wait a bit for connection to stabilize
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            if (sock.ws && sock.ws.readyState === sock.ws.OPEN) {
+              await sock.sendMessage(sock.user.id, {
+                text: `🏷️ *SESSION NAME: ${session.sessionName}*\n\n✅ Successfully connected!\n📱 Number: ${session.number}\n🔑 Session ID: ${sessionId}`
+              });
+              console.log(chalk.green('📤 Session name sent'));
+            } else {
+              console.log(chalk.yellow('⚠️ Connection not open, skipping message send'));
+            }
           } catch (e) {
             console.error('Failed to send session name:', e);
           }
           
-          // Disconnect after 3 seconds
+          // Disconnect after 3 seconds - don't send messages after this
           setTimeout(() => {
             try {
-              sock.ws.close();
-              console.log(chalk.yellow('🔌 Disconnected'));
+              console.log(chalk.yellow('🔌 Disconnecting...'));
+              if (sock.ws) {
+                sock.ws.close();
+              }
             } catch (e) {
               console.error('Error disconnecting:', e);
             }
@@ -633,12 +618,18 @@ async function startWhatsAppConnection(sessionId) {
                 await restartConnection(sessionId, authDir);
               } catch (error) {
                 console.error(chalk.red('❌ Restart failed:'), error);
+                session.status = 'error';
               }
             }, 2000);
+          } else {
+            console.log(chalk.red('❌ Max restart attempts reached'));
+            session.status = 'error';
           }
         } else if (reason === DisconnectReason.loggedOut) {
           console.log(chalk.red('❌ Logged out'));
           session.status = 'error';
+        } else if (reason === DisconnectReason.connectionClosed) {
+          console.log(chalk.yellow('🔌 Connection closed normally'));
         }
       }
     });
@@ -665,19 +656,25 @@ async function startWhatsAppConnection(sessionId) {
         }
         if (restartRequired && restartAttempts >= maxRestartAttempts) {
           console.log(chalk.yellow('⏰ Maximum restart attempts reached'));
+          session.status = 'timeout';
+          break;
+        }
+        if (session.status === 'error') {
+          console.log(chalk.red('❌ Session error detected, stopping wait'));
           break;
         }
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
-      if (!isPaired) {
-        console.log(chalk.yellow('⏰ Pairing timeout or max restarts reached'));
+      if (!isPaired && session.status !== 'error') {
+        console.log(chalk.yellow('⏰ Pairing timeout reached'));
         session.status = 'timeout';
       }
 
     } catch (error) {
       console.error(chalk.red('❌ Failed to get pairing code:'), error);
-      throw error;
+      session.status = 'error';
+      session.pairingCode = 'ERROR: ' + error.message;
     }
 
   } catch (error) {
@@ -690,90 +687,120 @@ async function startWhatsAppConnection(sessionId) {
     if (fs.existsSync(authDir)) {
       try {
         fs.rmSync(authDir, { recursive: true, force: true });
-      } catch (e) {}
+      } catch (e) {
+        console.error('Error cleaning up auth directory:', e);
+      }
     }
   }
 }
 
-// Function to restart connection after 515 error
+// Fixed restart connection function
 async function restartConnection(sessionId, authDir) {
   const session = userSessions.get(sessionId);
   if (!session) return;
 
   console.log(chalk.blue(`🔄 Creating new connection for ${sessionId}`));
 
-  const { state, saveCreds } = await useMultiFileAuthState(authDir);
-  const { version } = await fetchLatestBaileysVersion();
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const { version } = await fetchLatestBaileysVersion();
 
-  const minimalLogger = createMinimalLogger();
+    const minimalLogger = createMinimalLogger();
 
-  const newSock = makeWASocket({
-    version,
-    auth: state,
-    printQRInTerminal: false,
-    browser: ['Ubuntu', 'Chrome', '20.04'],
-    connectTimeoutMs: 60000,
-    keepAliveIntervalMs: 10000,
-    logger: minimalLogger
-  });
+    const newSock = makeWASocket({
+      version,
+      auth: state,
+      printQRInTerminal: false,
+      browser: ['Ubuntu', 'Chrome', '20.04'],
+      connectTimeoutMs: 60000,
+      keepAliveIntervalMs: 10000,
+      logger: minimalLogger
+    });
 
-  newSock.ev.on('creds.update', saveCreds);
+    newSock.ev.on('creds.update', saveCreds);
 
-  newSock.ev.on('connection.update', async (update) => {
-    const { connection } = update;
-    
-    console.log(chalk.yellow(`Restart connection update: ${connection}`));
-    
-    if (connection === 'open') {
-      console.log(chalk.green('✅ Restart connection successful!'));
+    newSock.ev.on('connection.update', async (update) => {
+      const { connection } = update;
       
-      if (newSock.authState.creds.registered) {
-        console.log(chalk.green('🔐 Successfully authenticated after restart!'));
+      console.log(chalk.yellow(`Restart connection update: ${connection}`));
+      
+      if (connection === 'open') {
+        console.log(chalk.green('✅ Restart connection successful!'));
         
-        // Export session string
-        const sessionString = exportSessionString(newSock.authState.creds);
-        if (sessionString) {
-          session.sessionString = sessionString;
-          session.isConnected = true;
-          session.status = 'completed';
-          saveSessionToFile(sessionId, sessionString, session.number, session.sessionName);
-          console.log(chalk.green(`💫 Session string exported`));
-        }
-        
-        // Send session name
-        try {
-          await newSock.sendMessage(newSock.user.id, {
-            text: `🏷️ *SESSION NAME: ${session.sessionName}*\n\n✅ Successfully connected!\n📱 Number: ${session.number}\n🔑 Session ID: ${sessionId}`
-          });
-          console.log(chalk.green('📤 Session name sent after restart'));
-        } catch (e) {
-          console.error('Failed to send session name:', e);
-        }
-        
-        // Disconnect after 3 seconds
-        setTimeout(() => {
-          try {
-            newSock.ws.close();
-            console.log(chalk.yellow('🔌 Disconnected after restart'));
-          } catch (e) {
-            console.error('Error disconnecting:', e);
+        if (newSock.authState.creds.registered) {
+          console.log(chalk.green('🔐 Successfully authenticated after restart!'));
+          
+          // Export session string
+          const sessionString = exportSessionString(newSock.authState.creds);
+          if (sessionString) {
+            session.sessionString = sessionString;
+            session.isConnected = true;
+            session.status = 'completed';
+            saveSessionToFile(sessionId, sessionString, session.number, session.sessionName);
+            console.log(chalk.green(`💫 Session string exported`));
           }
-        }, 3000);
+          
+          // Send session name with connection check
+          try {
+            // Wait for connection to stabilize
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            if (newSock.ws && newSock.ws.readyState === newSock.ws.OPEN) {
+              await newSock.sendMessage(newSock.user.id, {
+                text: `🏷️ *SESSION NAME: ${session.sessionName}*\n\n✅ Successfully reconnected!\n📱 Number: ${session.number}\n🔑 Session ID: ${sessionId}`
+              });
+              console.log(chalk.green('📤 Session name sent after restart'));
+            } else {
+              console.log(chalk.yellow('⚠️ Connection not open, skipping message send'));
+            }
+          } catch (e) {
+            console.error('Failed to send session name after restart:', e);
+          }
+          
+          // Disconnect after 3 seconds
+          setTimeout(() => {
+            try {
+              console.log(chalk.yellow('🔌 Disconnecting after restart...'));
+              if (newSock.ws) {
+                newSock.ws.close();
+              }
+            } catch (e) {
+              console.error('Error disconnecting after restart:', e);
+            }
+          }, 3000);
+        }
       }
-    }
-  });
+      
+      if (connection === 'close') {
+        console.log(chalk.yellow('🔌 Restart connection closed'));
+      }
+    });
+
+  } catch (error) {
+    console.error(chalk.red('❌ Error in restart connection:'), error);
+    session.status = 'error';
+  }
 }
 
 // Handle process shutdown
 process.on('SIGINT', () => {
-  console.log('\n🛑 Caught Ctrl+C, shutting down...');
+  console.log('\n🛑 Caught Ctrl+C, shutting down gracefully...');
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
-  console.log('\n🛑 Process terminated, shutting down...');
+  console.log('\n🛑 Process terminated, shutting down gracefully...');
   process.exit(0);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error(chalk.red('❌ Uncaught Exception:'), error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error(chalk.red('❌ Unhandled Rejection at:'), promise, 'reason:', reason);
 });
 
 console.log(chalk.blue('🌍 WhatsApp Pairing Service Starting...'));
 console.log(chalk.blue('🔄 Auto-restart enabled for 515 errors'));
+console.log(chalk.blue('🔧 Connection error handling improved'));
