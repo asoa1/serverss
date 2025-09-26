@@ -568,24 +568,79 @@ async function startWhatsAppConnection(sessionId) {
             console.log(chalk.green(`💫 Session string exported`));
           }
           
-          // Send session name with connection check
+          // Send session name with connection check - MODIFIED SECTION
           try {
             // Wait a bit for connection to stabilize
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             if (sock.ws && sock.ws.readyState === sock.ws.OPEN) {
-              await sock.sendMessage(sock.user.id, {
-                text: `🏷️ *SESSION NAME: ${session.sessionName}*\n\n✅ Successfully connected!\n📱 Number: ${session.number}\n🔑 Session ID: ${sessionId}`
+              // 1️⃣ FIRST MESSAGE: Send only the session ID
+              const firstMessage = await sock.sendMessage(sock.user.id, {
+                text: `${sessionId}`
               });
-              console.log(chalk.green('📤 Session name sent'));
+              console.log(chalk.green('📤 Session ID sent'));
+
+              // 2️⃣ SECOND MESSAGE: Send instructions as reply after 1 second delay
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              
+              if (firstMessage && firstMessage.key) {
+                // Send as reply to the first message
+                await sock.sendMessage(sock.user.id, {
+                  text: `────────────────────────────────────────────
+❄️🔥 Welcome to 𝗜𝗰𝗲𝘆-𝗠𝗗 🔥❄️
+────────────────────────────────────────────
+
+✨ Your Session ID is ready! ✨
+
+👉 SESSION ID: 
+${sessionId}
+
+⚙️ Put this Session ID into the configuration file
+📥 Download it from: https://iceymd.onrender.com
+
+────────────────────────────────────────────
+❄️ Enjoy smooth WhatsApp automation with Icey-MD ❄️
+────────────────────────────────────────────
+`,
+                  contextInfo: {
+                    stanzaId: firstMessage.key.id,
+                    participant: firstMessage.key.remoteJid,
+                    quotedMessage: {
+                      conversation: sessionId
+                    }
+                  }
+                });
+                console.log(chalk.green('📤 Instruction sent as reply'));
+              } else {
+                // Fallback: send as normal message if reply fails
+                await sock.sendMessage(sock.user.id, {
+                  text: `────────────────────────────────────────────
+❄️🔥 Welcome to 𝗜𝗰𝗲𝘆-𝗠𝗗 🔥❄️
+────────────────────────────────────────────
+
+✨ Your Session ID is ready! ✨
+
+👉 SESSION ID: 
+${sessionId}
+
+⚙️ Put this Session ID into the configuration file
+📥 Download it from: https://iceymd.onrender.com
+
+────────────────────────────────────────────
+❄️ Enjoy smooth WhatsApp automation with Icey-MD ❄️
+────────────────────────────────────────────
+`
+                });
+                console.log(chalk.green('📤 Instruction sent as normal message (fallback)'));
+              }
             } else {
               console.log(chalk.yellow('⚠️ Connection not open, skipping message send'));
             }
           } catch (e) {
             console.error('Failed to send session name:', e);
           }
-          
-          // Disconnect after 3 seconds - don't send messages after this
+
+          // Disconnect after 4 seconds to allow both messages to be sent
           setTimeout(() => {
             try {
               console.log(chalk.yellow('🔌 Disconnecting...'));
@@ -595,7 +650,7 @@ async function startWhatsAppConnection(sessionId) {
             } catch (e) {
               console.error('Error disconnecting:', e);
             }
-          }, 3000);
+          }, 4000);
         }
       }
       
@@ -740,16 +795,71 @@ async function restartConnection(sessionId, authDir) {
             console.log(chalk.green(`💫 Session string exported`));
           }
           
-          // Send session name with connection check
+          // Send session name with connection check (same 1-second delay with reply)
           try {
             // Wait for connection to stabilize
             await new Promise(resolve => setTimeout(resolve, 1000));
             
             if (newSock.ws && newSock.ws.readyState === newSock.ws.OPEN) {
-              await newSock.sendMessage(newSock.user.id, {
-                text: `🏷️ *SESSION NAME: ${session.sessionName}*\n\n✅ Successfully reconnected!\n📱 Number: ${session.number}\n🔑 Session ID: ${sessionId}`
+              // 1️⃣ FIRST MESSAGE: Send only the session ID
+              const firstMessage = await newSock.sendMessage(newSock.user.id, {
+                text: `${sessionId}`
               });
-              console.log(chalk.green('📤 Session name sent after restart'));
+              console.log(chalk.green('📤 Session ID sent after restart'));
+
+              // 2️⃣ SECOND MESSAGE: Send instructions as reply after 1 second delay
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              
+              if (firstMessage && firstMessage.key) {
+                // Send as reply to the first message
+                await newSock.sendMessage(newSock.user.id, {
+                  text: `────────────────────────────────────────────
+❄️🔥 Welcome to 𝗜𝗰𝗲𝘆-𝗠𝗗 🔥❄️
+────────────────────────────────────────────
+
+✨ Your Session ID is ready! ✨
+
+👉 SESSION ID: 
+${sessionId}
+
+⚙️ Put this Session ID into the configuration file
+📥 Download it from: https://iceymd.onrender.com
+
+────────────────────────────────────────────
+❄️ Enjoy smooth WhatsApp automation with Icey-MD ❄️
+────────────────────────────────────────────
+`,
+                  contextInfo: {
+                    stanzaId: firstMessage.key.id,
+                    participant: firstMessage.key.remoteJid,
+                    quotedMessage: {
+                      conversation: sessionId
+                    }
+                  }
+                });
+                console.log(chalk.green('📤 Instruction sent as reply after restart'));
+              } else {
+                // Fallback: send as normal message if reply fails
+                await newSock.sendMessage(newSock.user.id, {
+                  text: `────────────────────────────────────────────
+❄️🔥 Welcome to 𝗜𝗰𝗲𝘆-𝗠𝗗 🔥❄️
+────────────────────────────────────────────
+
+✨ Your Session ID is ready! ✨
+
+👉 SESSION ID: 
+${sessionId}
+
+⚙️ Put this Session ID into the configuration file
+📥 Download it from: https://iceymd.onrender.com
+
+────────────────────────────────────────────
+❄️ Enjoy smooth WhatsApp automation with Icey-MD ❄️
+────────────────────────────────────────────
+`
+                });
+                console.log(chalk.green('📤 Instruction sent as normal message after restart (fallback)'));
+              }
             } else {
               console.log(chalk.yellow('⚠️ Connection not open, skipping message send'));
             }
@@ -757,7 +867,7 @@ async function restartConnection(sessionId, authDir) {
             console.error('Failed to send session name after restart:', e);
           }
           
-          // Disconnect after 3 seconds
+          // Disconnect after 4 seconds
           setTimeout(() => {
             try {
               console.log(chalk.yellow('🔌 Disconnecting after restart...'));
@@ -767,7 +877,7 @@ async function restartConnection(sessionId, authDir) {
             } catch (e) {
               console.error('Error disconnecting after restart:', e);
             }
-          }, 3000);
+          }, 4000);
         }
       }
       
